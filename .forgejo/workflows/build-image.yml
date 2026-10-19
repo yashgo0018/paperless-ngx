@@ -1,0 +1,54 @@
+# Builds the Docker image on the CI VM and pushes it to this Forgejo instance's container registry.
+# Runs on every push to dev (pull-mirror syncs from GitHub count as pushes) and on manual dispatch.
+# Needs: Actions enabled on the repository, the runner label `ci-vm-host` (host mode, user in the docker
+# group) and a repository secret REGISTRY_TOKEN (personal access token with write:package).
+name: Build image
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: build-image-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ci-vm-host
+    timeout-minutes: 120
+    env:
+      REGISTRY: git.tail751a68.ts.net
+      IMAGE: git.tail751a68.ts.net/yash/paperless-ngx
+    steps:
+      - name: Check out
+        run: |
+          rm -rf src
+          git clone -q --depth 20 --branch "${{ github.ref_name }}" \
+            "https://oauth2:${{ github.token }}@${REGISTRY}/${{ github.repository }}.git" src
+          git -C src checkout -q "${{ github.sha }}" 2>/dev/null || echo "using branch head"
+          echo "SHORT=$(git -C src rev-parse --short=9 HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build
+        working-directory: src
+        run: |
+          docker buildx build --load \
+            --build-arg PNGX_TAG_VERSION="fork-${SHORT}" \
+            -t "${IMAGE}:${SHORT}" -t "${IMAGE}:${{ github.ref_name }}" .
+
+      - name: Push
+        run: |
+          echo "${{ secrets.REGISTRY_TOKEN }}" | docker login "${REGISTRY}" -u yash --password-stdin
+          docker push "${IMAGE}:${SHORT}"
+          docker push "${IMAGE}:${{ github.ref_name }}"
+          docker logout "${REGISTRY}"
+
+      - name: Clean up
+        if: always()
+        run: |
+          rm -rf src
+          # keep the current build locally, drop older commit tags of this image and stale build cache
+          docker images "${IMAGE}" --format '{{.Tag}}' \
+            | grep -vxE "${SHORT}|${{ github.ref_name }}" | xargs -r -I{} docker rmi "${IMAGE}:{}" || true
+          docker image prune -f
+          docker builder prune -f --filter until=168h
