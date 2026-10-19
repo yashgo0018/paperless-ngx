@@ -8,6 +8,7 @@ import zipfile
 from collections import defaultdict
 from collections import deque
 from collections.abc import Callable
+from collections.abc import Collection
 from datetime import datetime
 from datetime import timedelta
 from http import HTTPStatus
@@ -359,6 +360,7 @@ def _get_semantic_search_ids(
     *,
     user: User | None,
     filter_query: str | None = None,
+    exclude_ids: Collection[int] | None = None,
 ) -> list[int] | None:
     """Ids of the documents in ``documents`` semantically similar to
     ``query_str``, best first, or None when semantic search is unavailable
@@ -367,19 +369,20 @@ def _get_semantic_search_ids(
     from documents.search import SearchMode
     from paperless_ai.search import semantic_search_ids
 
-    semantic_ids = semantic_search_ids(query_str, documents)
-    if semantic_ids and filter_query is not None:
-        # The vector index knows no advanced query syntax, so let Tantivy
-        # apply the accompanying filter query (e.g. a relative date range).
-        matching_ids = set(
-            backend.search_ids(
-                filter_query,
-                user=user,
-                search_mode=SearchMode.QUERY,
-            ),
-        )
-        semantic_ids = [doc_id for doc_id in semantic_ids if doc_id in matching_ids]
-    return semantic_ids
+    # The vector index knows no advanced query syntax, so let Tantivy apply
+    # the accompanying filter query (e.g. a relative date range), before the
+    # semantic search so ineligible documents never use up its limit.
+    only_ids = (
+        backend.search_ids(filter_query, user=user, search_mode=SearchMode.QUERY)
+        if filter_query is not None
+        else None
+    )
+    return semantic_search_ids(
+        query_str,
+        documents,
+        only_ids=only_ids,
+        exclude_ids=exclude_ids,
+    )
 
 
 def _get_more_like_id(query_params: dict[str, Any], user: User | None) -> int:
@@ -2731,6 +2734,14 @@ class UnifiedSearchViewSet(DocumentViewSet):
             )
             fused_scores: dict[int, float] = {}
             if is_hybrid:
+                # Rank only the keyword hits the list can show: hits excluded
+                # by the other filters must not push eligible ones down the
+                # fused ranking, below semantic-only matches
+                all_ids = intersect_and_order(
+                    all_ids,
+                    filtered_qs,
+                    use_tantivy_sort=True,
+                )
                 fused_scores = dict(hybrid_ranking(all_ids, semantic_ids))
                 all_ids = list(fused_scores)
             ordered_ids = intersect_and_order(
@@ -3952,19 +3963,23 @@ class GlobalSearchView(PassUserMixin):
                 ][:OBJECT_LIMIT]
                 if _semantic_search_requested(request.query_params):
                     # Listed apart from the keyword matches, so those stay
-                    # first and a weaker semantic match never displaces one
-                    shown_ids = {doc.pk for doc in docs}
-                    semantic_ids = [
-                        doc_id
-                        for doc_id in _get_semantic_search_ids(
+                    # first and a weaker semantic match never displaces one.
+                    # Every keyword match is excluded, not only those shown,
+                    # so this lists what keyword search cannot find.
+                    semantic_ids = (
+                        _get_semantic_search_ids(
                             backend,
                             query,
                             permitted_docs,
                             user=user,
+                            exclude_ids=backend.search_ids(
+                                query,
+                                user=user,
+                                search_mode=SearchMode.TEXT,
+                            ),
                         )
                         or []
-                        if doc_id not in shown_ids
-                    ][:SEMANTIC_OBJECT_LIMIT]
+                    )[:SEMANTIC_OBJECT_LIMIT]
                     semantic_docs_by_id = all_docs.in_bulk(semantic_ids)
                     semantic_docs = [
                         semantic_docs_by_id[doc_id]

@@ -7,6 +7,7 @@ ranking via weighted reciprocal rank fusion.
 """
 
 import logging
+from collections.abc import Collection
 from collections.abc import Iterable
 from collections.abc import Sequence
 
@@ -56,15 +57,20 @@ def semantic_search_ids(
     query: str,
     documents: QuerySet[Document],
     *,
-    limit: int = SEMANTIC_SEARCH_MAX_DOCUMENTS,
+    limit: int | None = None,
+    only_ids: Collection[int] | None = None,
+    exclude_ids: Collection[int] | None = None,
 ) -> list[int] | None:
     """Return the ids of the documents in ``documents`` most similar to
-    ``query``, best first.
+    ``query``, best first, at most ``limit`` (SEMANTIC_SEARCH_MAX_DOCUMENTS
+    by default).
 
     ``documents`` scopes the search and must already be permission-filtered
-    for the requesting user: no id outside it is ever returned. Documents
-    less similar than ``PAPERLESS_AI_LLM_SEMANTIC_SEARCH_MIN_SCORE`` (cosine
-    similarity of their best chunk) are left out.
+    for the requesting user: no id outside it is ever returned. ``only_ids``
+    and ``exclude_ids`` narrow the scope further, e.g. to the results of a
+    Tantivy query, before the search, so they never use up the limit.
+    Documents less similar than ``PAPERLESS_AI_LLM_SEMANTIC_SEARCH_MIN_SCORE``
+    (cosine similarity of their best chunk) are left out.
 
     Returns None when semantic search is unavailable (the LLM index is
     disabled, not built yet, built with a different embedding model, or the
@@ -74,11 +80,19 @@ def semantic_search_ids(
     if not config.llm_index_enabled:
         return None
 
-    visible_ids = list(
-        documents.order_by()
-        .values_list("pk", flat=True)
-        .distinct()[: _VECTOR_FILTER_MAX_IDS + 1],
-    )
+    limit = limit or SEMANTIC_SEARCH_MAX_DOCUMENTS
+    id_queryset = documents.order_by().values_list("pk", flat=True).distinct()
+    only = set(only_ids) if only_ids is not None else None
+    excluded = set(exclude_ids or ())
+    if only is None and not excluded:
+        visible_ids = list(id_queryset[: _VECTOR_FILTER_MAX_IDS + 1])
+    else:
+        # Narrowed in Python: these id sets can be too large for a SQL IN
+        visible_ids = [
+            doc_id
+            for doc_id in id_queryset.iterator(chunk_size=2000)
+            if (only is None or doc_id in only) and doc_id not in excluded
+        ]
     if not visible_ids:
         return []
     filters = (
@@ -133,7 +147,11 @@ def semantic_search_ids(
         best_scores.setdefault(document_id, node.score or 0.0)
     min_score = config.llm_semantic_search_min_score
     candidate_ids = [
-        doc_id for doc_id, score in best_scores.items() if score >= min_score
+        doc_id
+        for doc_id, score in best_scores.items()
+        if score >= min_score
+        and (only is None or doc_id in only)
+        and doc_id not in excluded
     ]
     logger.debug(
         "Semantic search kept %d of %d documents at min score %s: %s",

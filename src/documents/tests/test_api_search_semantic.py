@@ -15,6 +15,7 @@ from documents.models import Document
 from documents.models import DocumentType
 from documents.search import get_backend
 from paperless_ai import indexing
+from paperless_ai import search
 from paperless_testing.factories import DocumentFactory
 from paperless_testing.factories import UserFactory
 from paperless_testing.fakes.embedding import ConceptEmbedding
@@ -221,6 +222,84 @@ class TestSemanticDocumentSearch:
 
         assert ids == [library["semantic"].pk]
 
+    def test_semantic_filter_query_applied_before_limit(
+        self,
+        admin_client: APIClient,
+        library: dict[str, Document],
+    ) -> None:
+        """
+        GIVEN:
+            - More better semantic matches outside a filter query's date
+              range than semantic search returns, and one inside it
+        WHEN:
+            - Searching with semantic=true and that filter query
+        THEN:
+            - The match inside the range is still found
+        """
+        backend = get_backend()
+        for i in range(search.SEMANTIC_SEARCH_MAX_DOCUMENTS):
+            backend.add_or_update(
+                DocumentFactory.create(
+                    title=f"Out of range {i}",
+                    content="holiday",
+                    created=datetime.date(2024, 6, 1),
+                ),
+            )
+        indexing.update_llm_index(rebuild=True)
+
+        ids = _result_ids(
+            admin_client.get(
+                "/api/documents/?text=holiday&semantic=true"
+                "&query=created:[2021-01-01 to 2021-12-31]",
+            ),
+        )
+
+        assert ids == [library["private"].pk]
+
+    def test_excluded_keyword_hits_do_not_push_eligible_ones_down(
+        self,
+        admin_client: APIClient,
+        llm_index: None,
+    ) -> None:
+        """
+        GIVEN:
+            - Many better keyword matches excluded by another list filter,
+              then an eligible weaker keyword match and a semantic-only one
+        WHEN:
+            - Searching with semantic=true and that filter
+        THEN:
+            - The eligible keyword match still ranks above the
+              semantic-only one
+        """
+        doc_type = DocumentType.objects.create(name="Photos")
+        for i in range(search.RRF_K + 5):
+            DocumentFactory.create(title=f"Holiday {i}", content="holiday holiday")
+        # Matches by keyword (its title) but not by meaning (titles are not
+        # embedded by default), so only the keyword ranking places it
+        weak_keyword = DocumentFactory.create(
+            title="Holiday notes",
+            content="filler " * 300,
+            document_type=doc_type,
+        )
+        semantic_only = DocumentFactory.create(
+            title="Spain",
+            content="vacation",
+            document_type=doc_type,
+        )
+        backend = get_backend()
+        for doc in Document.objects.all():
+            backend.add_or_update(doc)
+        indexing.update_llm_index(rebuild=True)
+
+        ids = _result_ids(
+            admin_client.get(
+                "/api/documents/?text=holiday&semantic=true"
+                f"&document_type__id={doc_type.pk}",
+            ),
+        )
+
+        assert ids == [weak_keyword.pk, semantic_only.pk]
+
     def test_semantic_with_field_ordering(
         self,
         admin_client: APIClient,
@@ -390,6 +469,32 @@ class TestSemanticGlobalSearch:
             library["private"].pk,
         }
         assert response.data["total"] == 4
+
+    def test_semantic_excludes_every_keyword_match(
+        self,
+        admin_client: APIClient,
+        llm_index: None,
+    ) -> None:
+        """
+        GIVEN:
+            - More keyword matches than global search fetches, all also
+              matching by meaning, and one semantic-only match
+        WHEN:
+            - Searching globally with semantic=true
+        THEN:
+            - Only the semantic-only match is listed by meaning
+        """
+        for i in range(12):
+            DocumentFactory.create(title=f"Checklist {i}", content="holiday")
+        semantic_only = DocumentFactory.create(title="Spain", content="vacation")
+        backend = get_backend()
+        for doc in Document.objects.all():
+            backend.add_or_update(doc)
+        indexing.update_llm_index(rebuild=True)
+
+        response = admin_client.get("/api/search/?query=holiday&semantic=true")
+
+        assert _semantic_ids(response) == [semantic_only.pk]
 
     def test_semantic_respects_permissions(
         self,

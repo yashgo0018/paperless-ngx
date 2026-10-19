@@ -161,6 +161,48 @@ class TestSemanticSearchIds:
 
         assert ids == [indexed_library["holiday"].pk]
 
+    def test_only_ids_narrow_the_scope_before_the_limit(
+        self,
+        indexed_library: dict[str, Document],
+        no_min_score: None,
+    ) -> None:
+        """
+        GIVEN:
+            - A best match outside only_ids
+        WHEN:
+            - Searching with a limit of 1
+        THEN:
+            - The best match within only_ids is returned, not nothing
+        """
+        car = indexed_library["car"]
+
+        ids = search.semantic_search_ids(
+            "holiday trip",
+            Document.objects.all(),
+            limit=1,
+            only_ids=[car.pk],
+        )
+
+        assert ids == [car.pk]
+
+    def test_exclude_ids_narrow_the_scope_before_the_limit(
+        self,
+        indexed_library: dict[str, Document],
+        no_min_score: None,
+    ) -> None:
+        holiday = indexed_library["holiday"]
+
+        ids = search.semantic_search_ids(
+            "holiday trip",
+            Document.objects.all(),
+            limit=1,
+            exclude_ids=[holiday.pk],
+        )
+
+        assert ids is not None
+        assert len(ids) == 1
+        assert holiday.pk not in ids
+
     def test_empty_queryset_returns_no_ids(
         self,
         indexed_library: dict[str, Document],
