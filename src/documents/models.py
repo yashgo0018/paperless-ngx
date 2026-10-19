@@ -816,6 +816,7 @@ class PaperlessTask(ModelWithOwner):
         BUILD_SHARE_LINK = "build_share_link", _("Build Share Link")
         BULK_DELETE = "bulk_delete", _("Bulk Delete")
         APPLY_AI_SUGGESTIONS = "apply_ai_suggestions", _("Apply AI Suggestions")
+        TRANSLATE_DOCUMENT = "translate_document", _("Translate Document")
 
     COMPLETE_STATUSES = (
         Status.SUCCESS,
@@ -988,6 +989,81 @@ class Note(SoftDeleteModel):
 
     def __str__(self):
         return self.note
+
+
+class DocumentTranslation(models.Model):
+    """
+    A translation of a document's text by the configured LLM, into one
+    language. Kept until the document is deleted or it is translated again.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        DONE = "done", _("Done")
+        FAILED = "failed", _("Failed")
+
+    document = models.ForeignKey(
+        Document,
+        related_name="translations",
+        on_delete=models.CASCADE,
+        verbose_name=_("document"),
+    )
+
+    language = models.CharField(
+        _("language"),
+        max_length=32,
+        help_text=_("Language translated into, e.g. en-us"),
+    )
+
+    source_language = models.CharField(
+        _("source language"),
+        max_length=32,
+        blank=True,
+        help_text=_("Language detected in the document text"),
+    )
+
+    status = models.CharField(
+        _("status"),
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    content = models.TextField(_("content"), blank=True)
+
+    error = models.TextField(_("error"), blank=True)
+
+    content_checksum = models.CharField(
+        _("content checksum"),
+        max_length=64,
+        blank=True,
+        help_text=_("SHA-256 of the text that was translated"),
+    )
+
+    truncated = models.BooleanField(
+        _("truncated"),
+        default=False,
+        help_text=_("Only the start of a long text was translated"),
+    )
+
+    model = models.CharField(_("model"), max_length=256, blank=True)
+
+    created = models.DateTimeField(_("created"), default=timezone.now)
+
+    modified = models.DateTimeField(_("modified"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("document translation")
+        verbose_name_plural = _("document translations")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["document", "language"],
+                name="%(app_label)s_%(class)s_unique_document_language",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.document_id}: {self.language} ({self.status})"
 
 
 class DocumentBarcode(models.Model):

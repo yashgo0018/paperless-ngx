@@ -344,6 +344,23 @@ disable the existing classifier-based suggestion system. Currently, both remote
 
 Paperless-ngx can use an AI LLM model to answer questions about a document or across multiple documents. Again, this feature works best when RAG is enabled. The chat feature is available in the upper app toolbar and will switch between chatting across multiple documents or a single document based on the current view.
 
+### Document Translation {#document-translation}
+
+With AI enabled, the "Translation" tab of a document translates its text into your language using the
+configured LLM, so no other translation service is involved. The language is
+[`PAPERLESS_AI_LLM_OUTPUT_LANGUAGE`](configuration.md#PAPERLESS_AI_LLM_OUTPUT_LANGUAGE) if set, otherwise
+your display language.
+
+Translating runs in the background and can take a few minutes, as the text is translated a section at a
+time to fit the model's context window. The translation is kept with the document, showing the language it
+was detected in and the model used, and is marked as outdated when the document's text changes, e.g. after
+it is reprocessed. Documents already in your language are not sent to the AI. Very long documents are
+translated up to [`PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH`](configuration.md#PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH)
+characters.
+
+Translating requires permission to change the document, reading a translation permission to view it.
+Translations are not included in [exports](administration.md#exporter); they can be recreated.
+
 ## Sharing documents from Paperless-ngx
 
 Paperless-ngx supports sharing documents with other users by assigning them [permissions](#object-permissions)

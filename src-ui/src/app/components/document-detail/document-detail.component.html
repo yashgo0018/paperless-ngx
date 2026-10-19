@@ -392,6 +392,15 @@
           </li>
         }
 
+        @if (aiEnabled) {
+          <li [ngbNavItem]="DocumentDetailNavIDs.Translation">
+            <a ngbNavLink i18n>Translation</a>
+            <ng-template ngbNavContent>
+              <pngx-document-translation [documentId]="documentId()" [canEdit]="userCanEdit"></pngx-document-translation>
+            </ng-template>
+          </li>
+        }
+
         @if (historyEnabled) {
           <li [ngbNavItem]="DocumentDetailNavIDs.History">
             <a ngbNavLink i18n>History</a>

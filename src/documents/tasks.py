@@ -759,6 +759,17 @@ def llmindex_index(
     )
 
 
+@shared_task
+def translate_document(translation_id: int, document_id: int) -> None:
+    """
+    Translate a document's text with the configured LLM, see
+    paperless_ai.translation. ``document_id`` is for task tracking only.
+    """
+    from paperless_ai.translation import run_translation
+
+    run_translation(translation_id)
+
+
 @shared_task(
     bind=True,
     autoretry_for=(LLMTimeoutError,),

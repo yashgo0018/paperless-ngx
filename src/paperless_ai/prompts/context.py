@@ -44,3 +44,10 @@ class ChatQaPromptContext(PromptContext):
 class ChatRefinePromptContext(PromptContext):
     template_name: ClassVar[PromptName] = PromptName.CHAT_REFINE
     output_language: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class TranslationPromptContext(PromptContext):
+    template_name: ClassVar[PromptName] = PromptName.TRANSLATION
+    language_name: str
+    text: str

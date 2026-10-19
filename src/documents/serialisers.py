@@ -61,6 +61,7 @@ from documents.models import CustomField
 from documents.models import CustomFieldInstance
 from documents.models import Document
 from documents.models import DocumentBarcode
+from documents.models import DocumentTranslation
 from documents.models import DocumentType
 from documents.models import MatchingModel
 from documents.models import Note
@@ -1001,6 +1002,52 @@ class NotesSerializer(serializers.ModelSerializer[Note]):
         model = Note
         fields = ["id", "note", "created", "user"]
         ordering = ["-created"]
+
+
+class DocumentTranslationSerializer(
+    serializers.ModelSerializer[DocumentTranslation],
+):
+    language_name = serializers.SerializerMethodField()
+    source_language_name = serializers.SerializerMethodField()
+    outdated = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DocumentTranslation
+        fields = [
+            "language",
+            "language_name",
+            "source_language",
+            "source_language_name",
+            "status",
+            "content",
+            "error",
+            "truncated",
+            "model",
+            "created",
+            "modified",
+            "outdated",
+        ]
+
+    def get_language_name(self, obj: DocumentTranslation) -> str:
+        from paperless_ai.translation import language_display_name
+
+        return language_display_name(obj.language)
+
+    def get_source_language_name(self, obj: DocumentTranslation) -> str | None:
+        from paperless_ai.translation import language_display_name
+
+        return (
+            language_display_name(obj.source_language) if obj.source_language else None
+        )
+
+    def get_outdated(self, obj: DocumentTranslation) -> bool:
+        """Whether the document's text changed since it was translated."""
+        from paperless_ai.translation import content_checksum
+
+        return obj.status == DocumentTranslation.Status.DONE and (
+            obj.content_checksum
+            != content_checksum(obj.document.get_effective_content() or "")
+        )
 
 
 def _get_viewable_duplicates(
