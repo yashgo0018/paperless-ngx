@@ -387,6 +387,58 @@ class TestCustomFieldsAPI(DirectoriesMixin, APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
+    def test_custom_field_ai_suggestion_validation(self) -> None:
+        """
+        GIVEN:
+            - Custom field does not exist
+        WHEN:
+            - API requests create custom fields with AI suggestion settings
+        THEN:
+            - Valid settings are saved
+            - A non-boolean ai_suggest, an overlong ai_hint, or enabling
+              suggestions for a document link field are rejected
+        """
+
+        def create(data_type: str, extra_data: dict):
+            return self.client.post(
+                self.ENDPOINT,
+                json.dumps(
+                    {
+                        "data_type": data_type,
+                        "name": f"Field {data_type} {len(extra_data)}",
+                        "extra_data": extra_data,
+                    },
+                ),
+                content_type="application/json",
+            )
+
+        resp = create("string", {"ai_suggest": True, "ai_hint": "Policy number"})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            CustomField.objects.get(pk=resp.data["id"]).extra_data["ai_hint"],
+            "Policy number",
+        )
+
+        resp = create("string", {"ai_suggest": "yes"})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp = create("string", {"ai_suggest": True, "ai_hint": "x" * 201})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp = create("documentlink", {"ai_suggest": True})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+        field = CustomField.objects.create(
+            name="Related",
+            data_type=CustomField.FieldDataType.DOCUMENTLINK,
+        )
+        resp = self.client.patch(
+            f"{self.ENDPOINT}{field.pk}/",
+            json.dumps({"extra_data": {"ai_suggest": True}}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_create_custom_field_instance(self) -> None:
         """
         GIVEN:

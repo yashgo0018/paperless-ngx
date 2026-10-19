@@ -5851,6 +5851,74 @@ class TestApplyAISuggestionsWorkflowAction(
         self.assertEqual(changed, [])
         self.assertIn("no AI suggestion fields selected", "".join(cm.output))
 
+    def _ai_custom_field(self) -> CustomField:
+        return CustomField.objects.create(
+            name="Invoice total",
+            data_type=CustomField.FieldDataType.MONETARY,
+            extra_data={"ai_suggest": True},
+        )
+
+    def _with_custom_field_value(
+        self,
+        field: CustomField,
+        value: str,
+    ) -> ClassificationSuggestions:
+        return {**SUGGESTIONS, "custom_fields": [{"field": field.pk, "value": value}]}
+
+    def test_custom_field_suggestions_are_applied(self) -> None:
+        """
+        GIVEN:
+            - A custom field enabled for AI suggestions, not on the document
+        WHEN:
+            - Custom field suggestions are applied
+        THEN:
+            - The field is added with the value converted to its data type
+        """
+        field = self._ai_custom_field()
+        action = self.make_action(
+            ai_suggestion_fields=[WorkflowAction.AISuggestionField.CUSTOM_FIELDS],
+        )
+
+        changed = self.apply(action, self._with_custom_field_value(field, "€12,50"))
+
+        self.assertEqual(changed, ["custom_fields"])
+        instance = CustomFieldInstance.objects.get(document=self.doc, field=field)
+        self.assertEqual(instance.value, "EUR12.50")
+
+    def test_custom_field_value_is_only_replaced_with_overwrite(self) -> None:
+        field = self._ai_custom_field()
+        CustomFieldInstance.objects.create(
+            document=self.doc,
+            field=field,
+            value_monetary="EUR1.00",
+        )
+        suggestions = self._with_custom_field_value(field, "EUR12.50")
+
+        action = self.make_action(
+            ai_suggestion_fields=[WorkflowAction.AISuggestionField.CUSTOM_FIELDS],
+        )
+        self.assertEqual(self.apply(action, suggestions), [])
+        self.assertEqual(
+            CustomFieldInstance.objects.get(document=self.doc, field=field).value,
+            "EUR1.00",
+        )
+
+        action.ai_overwrite_existing = True
+        action.save()
+        self.assertEqual(self.apply(action, suggestions), ["custom_fields"])
+        self.assertEqual(
+            CustomFieldInstance.objects.get(document=self.doc, field=field).value,
+            "EUR12.50",
+        )
+
+    def test_custom_field_suggestions_need_selecting(self) -> None:
+        field = self._ai_custom_field()
+        action = self.make_action()
+
+        self.apply(action, self._with_custom_field_value(field, "EUR12.50"))
+
+        self.assertFalse(CustomFieldInstance.objects.filter(field=field).exists())
+
     @override_settings(AI_ENABLED=False)
     def test_ai_disabled_does_nothing(self) -> None:
         """

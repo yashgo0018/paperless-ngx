@@ -63,6 +63,8 @@ export interface CustomField extends ObjectWithId {
   extra_data?: {
     select_options?: Array<{ label: string; id: string }>
     default_currency?: string
+    ai_suggest?: boolean
+    ai_hint?: string
   }
   document_count?: number
 }

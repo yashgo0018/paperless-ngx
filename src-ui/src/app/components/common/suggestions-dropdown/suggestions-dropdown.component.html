@@ -48,6 +48,14 @@
               <button type="button" class="list-group-item list-group-item-action bg-light" (click)="addCorrespondent.emit(correspondent)">{{ correspondent }}</button>
             }
           }
+          @if (customFieldSuggestions.length > 0) {
+            <div class="list-group-item text-uppercase text-muted small"><i-bs class="me-2" name="ui-radios"></i-bs><ng-container i18n>Custom Fields</ng-container></div>
+            @for (suggestion of customFieldSuggestions; track suggestion.field) {
+              <button type="button" class="list-group-item list-group-item-action bg-light" (click)="applyCustomField.emit(suggestion)">
+                <span class="text-muted">{{ getCustomField(suggestion)?.name }}:</span> {{ customFieldDisplayValue(suggestion) }}
+              </button>
+            }
+          }
           @if (fieldSuggestions > 0) {
             <div class="list-group-item text-muted fst-italic">
               <small class="text-muted small fst-italic" i18n>{fieldSuggestions, plural, =1 {1 suggestion available below} other {{{fieldSuggestions}} suggestions available below}}</small>

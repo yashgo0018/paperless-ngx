@@ -257,6 +257,9 @@ from paperless.views import StandardPagination
 from paperless_ai.ai_classifier import get_ai_document_classification
 from paperless_ai.ai_classifier import get_llm_output_language
 from paperless_ai.chat import stream_chat_with_documents
+from paperless_ai.custom_fields import ai_suggested_custom_fields
+from paperless_ai.custom_fields import custom_fields_fingerprint
+from paperless_ai.custom_fields import normalize_custom_field_value
 from paperless_ai.exceptions import LLMProviderError
 from paperless_ai.exceptions import LLMTimeoutError
 from paperless_ai.matching import extract_unmatched_names
@@ -383,6 +386,26 @@ def _get_semantic_search_ids(
         only_ids=only_ids,
         exclude_ids=exclude_ids,
     )
+
+
+def _custom_field_suggestion_values(
+    suggestions: list[dict[str, Any]],
+    fields: list[CustomField],
+) -> list[dict[str, Any]]:
+    """Suggested custom field values, converted to each field's data type.
+    Fields no longer enabled for AI suggestions, and values that are not
+    valid for their field, are left out.
+    """
+    fields_by_id = {field.pk: field for field in fields}
+    values = []
+    for suggestion in suggestions:
+        field = fields_by_id.get(suggestion["field"])
+        if field is None:
+            continue
+        value = normalize_custom_field_value(field, suggestion["value"])
+        if value is not None:
+            values.append({"field": field.pk, "value": value})
+    return values
 
 
 def _get_more_like_id(query_params: dict[str, Any], user: User | None) -> int:
@@ -994,6 +1017,15 @@ class EmailDocumentDetailSchema(EmailSerializer):
                         child=serializers.CharField(),
                     ),
                     "dates": serializers.ListField(child=serializers.CharField()),
+                    "custom_fields": serializers.ListField(
+                        child=inline_serializer(
+                            name="AICustomFieldSuggestion",
+                            fields={
+                                "field": serializers.IntegerField(),
+                                "value": serializers.JSONField(),
+                            },
+                        ),
+                    ),
                 },
             ),
             400: None,
@@ -1695,6 +1727,7 @@ class DocumentViewSet(
             ai_config=ai_config,
             user=request.user,
         )
+        ai_custom_fields = ai_suggested_custom_fields()
         llm_cache_backend = ":".join(
             part
             for part in (
@@ -1703,6 +1736,9 @@ class DocumentViewSet(
                 ai_config.llm_endpoint,
                 output_language,
                 f"user={request.user.pk}",
+                f"custom_fields={custom_fields_fingerprint(ai_custom_fields)}"
+                if ai_custom_fields
+                else None,
             )
             if part
         )
@@ -1850,6 +1886,10 @@ class DocumentViewSet(
                 matched_paths,
             ),
             "dates": llm_suggestions["dates"],
+            "custom_fields": _custom_field_suggestion_values(
+                llm_suggestions.get("custom_fields", []),
+                ai_custom_fields,
+            ),
         }
 
         return Response(resp_data)

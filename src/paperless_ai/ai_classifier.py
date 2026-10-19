@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 from django.contrib.auth.models import User
 
+from documents.models import CustomField
 from documents.models import Document
 from documents.permissions import permitted_document_ids
 from documents.permissions import user_is_active_superuser
@@ -12,6 +13,8 @@ from paperless_ai.base_model import ClassificationSuggestions
 from paperless_ai.base_model import TaxonomyChoiceDict
 from paperless_ai.base_model import classification_suggestions_to_model
 from paperless_ai.client import AIClient
+from paperless_ai.custom_fields import ai_suggested_custom_fields
+from paperless_ai.custom_fields import format_custom_fields_for_prompt
 from paperless_ai.db import db_connection_released
 from paperless_ai.indexing import retrieve_similar_nodes
 from paperless_ai.indexing import truncate_content
@@ -110,6 +113,7 @@ def build_prompt_without_rag(
     document: Document,
     config: AIConfig,
     candidates: TaxonomyCandidates | None = None,
+    custom_fields: list[CustomField] | None = None,
 ) -> str:
     filename = document.filename or ""
     content = truncate_content(
@@ -129,6 +133,7 @@ def build_prompt_without_rag(
             content=content,
             taxonomy_block=taxonomy_block,
             has_candidates=has_candidates,
+            custom_fields_block=format_custom_fields_for_prompt(custom_fields or []),
         ),
     )
 
@@ -138,11 +143,13 @@ def build_prompt_with_rag(
     config: AIConfig,
     candidates: TaxonomyCandidates | None = None,
     context: str = "",
+    custom_fields: list[CustomField] | None = None,
 ) -> str:
     base_prompt = build_prompt_without_rag(
         document,
         config,
         candidates=candidates,
+        custom_fields=custom_fields,
     )
     truncated_context = truncate_content(
         context,
@@ -280,14 +287,17 @@ def parse_ai_response(raw: dict) -> ClassificationSuggestions:
         document_types=_choice(raw.get("document_types")),
         storage_paths=_choice(raw.get("storage_paths")),
         dates=raw.get("dates", []),
+        custom_fields=raw.get("custom_fields", []),
     )
 
 
 def _candidate_id_allowlist(
     candidates: TaxonomyCandidates,
+    custom_fields: list[CustomField] | None = None,
 ) -> dict[str, set[int]]:
     """Candidate IDs grouped by category for validating model mappings."""
     return {
+        "custom_fields": {field.pk for field in custom_fields or []},
         "tags": {candidate["id"] for candidate in candidates["tags"]},
         "document_types": {
             candidate["id"] for candidate in candidates["document_types"]
@@ -307,11 +317,13 @@ def get_ai_document_classification(
     ai_config = AIConfig()
 
     candidates, context = get_taxonomy_context(document, user)
+    custom_fields = ai_suggested_custom_fields()
     prompt = build_prompt_with_rag(
         document,
         ai_config,
         candidates=candidates,
         context=context,
+        custom_fields=custom_fields,
     )
 
     client = AIClient()
@@ -320,7 +332,7 @@ def get_ai_document_classification(
     with db_connection_released():
         result = client.run_llm_query(
             prompt,
-            allowed_candidate_ids=_candidate_id_allowlist(candidates),
+            allowed_candidate_ids=_candidate_id_allowlist(candidates, custom_fields),
         )
         suggestions = parse_ai_response(result)
         if output_language:
@@ -348,5 +360,6 @@ def get_ai_document_classification(
                 document_types=_localized_choice("document_types"),
                 storage_paths=_localized_choice("storage_paths"),
                 dates=suggestions["dates"],
+                custom_fields=suggestions["custom_fields"],  # never localized
             )
     return suggestions

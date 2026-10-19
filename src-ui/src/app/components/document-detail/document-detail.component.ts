@@ -49,6 +49,7 @@ import { Document, DocumentVersionInfo } from 'src/app/data/document'
 import { DocumentMetadata } from 'src/app/data/document-metadata'
 import { DocumentNote } from 'src/app/data/document-note'
 import {
+  CustomFieldSuggestion,
   DocumentSuggestions,
   mergeSuggestions,
 } from 'src/app/data/document-suggestions'
@@ -1885,6 +1886,20 @@ export class DocumentDetailComponent
     this.updateFormForCustomFields(true)
     this.documentForm.get('custom_fields').markAsDirty()
     this.documentForm.updateValueAndValidity()
+  }
+
+  public applyCustomFieldSuggestion(suggestion: CustomFieldSuggestion) {
+    let index = this.document().custom_fields.findIndex(
+      (instance) => instance.field === suggestion.field
+    )
+    if (index === -1) {
+      const field = this.customFields()?.find((f) => f.id === suggestion.field)
+      if (!field) return
+      this.addField(field)
+      index = this.customFieldFormFields.length - 1
+    }
+    this.customFieldFormFields.at(index).get('value').setValue(suggestion.value)
+    this.documentForm.get('custom_fields').markAsDirty()
   }
 
   public removeField(fieldInstance: CustomFieldInstance) {

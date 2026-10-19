@@ -1388,6 +1388,43 @@ describe('DocumentDetailComponent', () => {
     )
   })
 
+  it('should apply custom field suggestions', () => {
+    initNormally()
+    // the shared doc fixture may have gained fields in earlier tests
+    const initialLength = component.document().custom_fields.length
+    const existing = component.document().custom_fields[0]
+    const missing = {
+      id: 50,
+      name: 'Invoice total',
+      data_type: CustomFieldDataType.Monetary,
+    }
+    component.customFields.set([...component.customFields(), missing])
+
+    // the document has the field, set its value
+    component.applyCustomFieldSuggestion({
+      field: existing.field,
+      value: 'suggested',
+    })
+    expect(component.customFieldFormFields.at(0).value.value).toEqual(
+      'suggested'
+    )
+    expect(component.document().custom_fields).toHaveLength(initialLength)
+
+    // the document does not have the field, add it with the value
+    component.applyCustomFieldSuggestion({ field: 50, value: 'EUR12.50' })
+    expect(component.document().custom_fields).toHaveLength(initialLength + 1)
+    expect(
+      component.customFieldFormFields.at(initialLength).value
+    ).toMatchObject({ field: 50, value: 'EUR12.50' })
+    expect(component.documentForm.get('custom_fields').dirty).toBe(true)
+
+    // unknown fields are ignored
+    component.applyCustomFieldSuggestion({ field: 99, value: 'x' })
+    expect(component.document().custom_fields).toHaveLength(initialLength + 1)
+
+    component.removeField(component.document().custom_fields[initialLength])
+  })
+
   it('should correctly determine changed fields', () => {
     initNormally()
     expect(component['getChangedFields']()).toEqual({

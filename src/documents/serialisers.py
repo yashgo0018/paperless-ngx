@@ -837,7 +837,41 @@ class CustomFieldSerializer(serializers.ModelSerializer[CustomField]):
             raise serializers.ValidationError(
                 {"error": "extra_data.default_currency must be a 3-character string"},
             )
+        self._validate_ai_extra_data(attrs)
         return super().validate(attrs)
+
+    def _validate_ai_extra_data(self, attrs) -> None:
+        from paperless_ai.custom_fields import AI_HINT_KEY
+        from paperless_ai.custom_fields import AI_SUGGEST_KEY
+        from paperless_ai.custom_fields import MAX_AI_HINT_LENGTH
+        from paperless_ai.custom_fields import SUGGESTIBLE_DATA_TYPES
+
+        extra_data = attrs.get("extra_data")
+        if not isinstance(extra_data, dict):
+            return
+        ai_suggest = extra_data.get(AI_SUGGEST_KEY)
+        if ai_suggest is not None and not isinstance(ai_suggest, bool):
+            raise serializers.ValidationError(
+                {"error": f"extra_data.{AI_SUGGEST_KEY} must be a boolean"},
+            )
+        data_type = attrs.get(
+            "data_type",
+            self.instance.data_type if self.instance is not None else None,
+        )
+        if ai_suggest and data_type not in SUGGESTIBLE_DATA_TYPES:
+            raise serializers.ValidationError(
+                {"error": "AI suggestions are not available for this data type"},
+            )
+        ai_hint = extra_data.get(AI_HINT_KEY)
+        if ai_hint is not None and (
+            not isinstance(ai_hint, str) or len(ai_hint) > MAX_AI_HINT_LENGTH
+        ):
+            raise serializers.ValidationError(
+                {
+                    "error": f"extra_data.{AI_HINT_KEY} must be a string of at "
+                    f"most {MAX_AI_HINT_LENGTH} characters",
+                },
+            )
 
 
 class ReadWriteSerializerMethodField(serializers.SerializerMethodField):

@@ -332,13 +332,21 @@ The AI features work by creating an embedding of the text content and metadata o
 
 See [AI features](advanced_usage.md#ai-features) for how to enable and configure these features, including choosing an LLM backend and setting up the LLM index for RAG.
 
-### AI-Enhanced Suggestions
+### AI-Enhanced Suggestions {#ai-enhanced-suggestions}
 
 If enabled, Paperless-ngx can use an AI LLM model to suggest document titles, dates, tags,
 correspondents and document types for documents. This feature will always be "opt-in" and does not
 disable the existing classifier-based suggestion system. Currently, both remote
 (via OpenAI-compatible APIs) and local (via Ollama) models are supported, see
 [configuration](configuration.md#ai) for details.
+
+AI suggestions can also include values for [custom fields](#custom-fields), such as an invoice
+total, a due date or a policy number. Enable "Suggest values with AI" on each custom field that
+should be suggested, optionally with a hint on what to look for, e.g. "the total amount including
+VAT". Only fields enabled this way are sent to the AI, at most 10. A suggested value is checked
+against the field's data type (a date, an amount, one of a select field's options, ...) and dropped
+if it is not valid, and it is only applied when you choose it from the suggestions, which adds the
+field to the document if needed. Document link fields cannot be suggested.
 
 ### Document Chat
 
@@ -705,15 +713,18 @@ processed locally instead and a warning is written to the log.
 the same as the AI suggestions shown on the document detail page, except applied automatically and in bulk.
 It requires [AI features](configuration.md#ai) to be enabled. You can specify:
 
-- Which suggestions to apply: title, tags, correspondent, document type, storage path and / or created
-  date. Suggestions for fields you did not select are discarded.
+- Which suggestions to apply: title, tags, correspondent, document type, storage path, created
+  date and / or custom fields. Suggestions for fields you did not select are discarded. Custom
+  fields are only suggested for fields with [AI suggestions](#ai-enhanced-suggestions) enabled; a
+  suggested field missing from the document is added.
 - Whether to create missing items. By default only tags, correspondents and document types that
   already exist are assigned and any other suggestion is dropped. With this enabled, suggested items
   that do not exist are created. Storage paths are never created.
 - Whether to overwrite existing values. By default a field is only filled in if it is currently empty.
   Note that documents almost always already have a title and created date, so if you select those you
   will usually want to enable this too. Tags are an exception: suggested tags are always added and
-  never replace the document's existing tags.
+  never replace the document's existing tags. Custom fields follow the same rule as other fields: an
+  existing value is only replaced with this enabled.
 
 The action works with every trigger **except Consumption Started**, because suggestions are made from
 the document's text, which does not exist until after the document has been processed. Documents whose

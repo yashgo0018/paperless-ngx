@@ -10,6 +10,7 @@ import pytest_mock
 from django.test import override_settings
 from guardian.shortcuts import remove_perm
 
+from documents.models import CustomField
 from documents.models import Document
 from documents.search import TantivyBackend
 from paperless.config import AIConfig
@@ -222,6 +223,7 @@ def test_use_rag_if_configured(
     mock_run_llm_query.assert_called_once_with(
         "Prompt with RAG",
         allowed_candidate_ids={
+            "custom_fields": set(),
             "tags": {12},
             "document_types": set(),
             "correspondents": set(),
@@ -1255,3 +1257,66 @@ def test_get_ai_document_classification_localizes_only_new_names(
     assert "Contractor Work" in localization_prompt
     assert result["tags"]["existing_ids"] == [12]  # untouched by localization
     assert result["tags"]["new_names"] == ["Auftragsarbeit"]
+
+
+@pytest.mark.django_db
+def test_build_prompt_lists_ai_suggested_custom_fields():
+    """
+    GIVEN:
+        - A custom field enabled for AI suggestions
+    WHEN:
+        - The classification prompt is built with it, then without any
+    THEN:
+        - The prompt lists the field by ID, name and format, and only then
+    """
+    document = DocumentFactory.create(content="Total due: 12.99 EUR")
+    field = CustomField.objects.create(
+        name="Invoice total",
+        data_type=CustomField.FieldDataType.MONETARY,
+        extra_data={"ai_suggest": True, "ai_hint": "Including VAT"},
+    )
+
+    prompt = build_prompt_without_rag(document, AIConfig(), custom_fields=[field])
+
+    assert "- custom_fields:" in prompt
+    assert f'- ID {field.pk}: "Invoice total"' in prompt
+    assert "Including VAT" in prompt
+    assert "custom_fields" not in build_prompt_without_rag(document, AIConfig())
+
+
+@pytest.mark.django_db
+@patch("paperless_ai.client.AIClient.run_llm_query")
+@override_settings(LLM_BACKEND="ollama", LLM_MODEL="some_model")
+def test_get_ai_document_classification_suggests_custom_fields(
+    mock_run_llm_query,
+    mock_document,
+):
+    """
+    GIVEN:
+        - A custom field enabled for AI suggestions
+    WHEN:
+        - get_ai_document_classification() runs with localization
+    THEN:
+        - The field's ID is allowed in the model's answer
+        - Its suggested value is kept as returned, never localized
+    """
+    field = CustomField.objects.create(
+        name="Policy number",
+        data_type=CustomField.FieldDataType.STRING,
+        extra_data={"ai_suggest": True},
+    )
+    CustomField.objects.create(
+        name="Unused",
+        data_type=CustomField.FieldDataType.STRING,
+    )
+    suggested = [{"field": field.pk, "value": "HA-123"}]
+    mock_run_llm_query.side_effect = [
+        {**NESTED_SUGGESTIONS, "custom_fields": suggested},
+        {**NESTED_SUGGESTIONS, "custom_fields": [{"field": field.pk, "value": "x"}]},
+    ]
+
+    result = get_ai_document_classification(mock_document, output_language="de-de")
+
+    assert result["custom_fields"] == suggested
+    allowed = mock_run_llm_query.call_args_list[0].kwargs["allowed_candidate_ids"]
+    assert allowed["custom_fields"] == {field.pk}

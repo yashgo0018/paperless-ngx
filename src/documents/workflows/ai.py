@@ -6,6 +6,7 @@ from typing import TypeVar
 from django.contrib.auth.models import User
 
 from documents.models import Correspondent
+from documents.models import CustomFieldInstance
 from documents.models import Document
 from documents.models import DocumentType
 from documents.models import MatchingModel
@@ -15,6 +16,9 @@ from documents.models import WorkflowAction
 from paperless.config import AIConfig
 from paperless_ai.ai_classifier import get_ai_document_classification
 from paperless_ai.ai_classifier import get_llm_output_language
+from paperless_ai.base_model import CustomFieldSuggestion
+from paperless_ai.custom_fields import ai_suggested_custom_fields
+from paperless_ai.custom_fields import normalize_custom_field_value
 from paperless_ai.matching import extract_unmatched_names
 from paperless_ai.matching import match_correspondents_by_name
 from paperless_ai.matching import match_document_types_by_name
@@ -108,6 +112,46 @@ def resolve_tags(
             logger.info("Created tag '%s' from AI suggestion", tag.name)
         tags.append(tag)
     return tags
+
+
+def apply_custom_field_suggestions(
+    document: Document,
+    suggestions: list[CustomFieldSuggestion],
+    *,
+    overwrite: bool,
+) -> bool:
+    """
+    Set the suggested values of the fields still enabled for AI suggestions,
+    adding a field missing from the document. An existing value is only
+    replaced with overwrite. Returns whether anything changed.
+    """
+    fields = {field.pk: field for field in ai_suggested_custom_fields()}
+    changed = False
+    for suggestion in suggestions:
+        field = fields.get(suggestion["field"])
+        if field is None:
+            continue
+        value = normalize_custom_field_value(field, suggestion["value"])
+        if value is None:
+            continue
+        value_field_name = CustomFieldInstance.get_value_field_name(field.data_type)
+        instance = CustomFieldInstance.objects.filter(
+            field=field,
+            document=document,
+        ).first()
+        if instance is None:
+            CustomFieldInstance.objects.create(
+                field=field,
+                document=document,
+                **{value_field_name: value},
+            )
+        elif overwrite or instance.value in (None, ""):
+            setattr(instance, value_field_name, value)
+            instance.save()
+        else:
+            continue
+        changed = True
+    return changed
 
 
 def apply_ai_suggestions_to_document(
@@ -251,6 +295,13 @@ def apply_ai_suggestions_to_document(
             # Suggested tags are always added, so overwrite_existing
             # does not really apply here
             updated_fields.append("tags")
+
+    if AISuggestionField.CUSTOM_FIELDS in selected and apply_custom_field_suggestions(
+        document,
+        suggestions.get("custom_fields", []),
+        overwrite=overwrite,
+    ):
+        updated_fields.append("custom_fields")
 
     if updated_fields:
         # save fields and update modified (excluding m2m tags from update_fields)
