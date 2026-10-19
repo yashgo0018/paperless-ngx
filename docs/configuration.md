@@ -2266,6 +2266,14 @@ between the query and the document's most similar chunk in the LLM index.
 
     Defaults to 0.5.
 
+#### [`PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH=<int>`](#PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH) {#PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH}
+
+: The most characters of a document's text that [document translation](usage.md#document-translation)
+translates; the rest of a longer document is left out. Each part of the text is a separate request to the
+LLM, so this limits how long a translation takes.
+
+    Defaults to 50000.
+
 #### [`PAPERLESS_AI_LLM_EXTRA_PARAMS=<json>`](#PAPERLESS_AI_LLM_EXTRA_PARAMS) {#PAPERLESS_AI_LLM_EXTRA_PARAMS}
 
 : A JSON object of extra parameters sent with every LLM request, for providers that require a parameter Paperless does not

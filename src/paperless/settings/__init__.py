@@ -1255,5 +1255,14 @@ if not 0 <= LLM_SEMANTIC_SEARCH_MIN_SCORE <= 1:
     raise ImproperlyConfigured(
         "PAPERLESS_AI_LLM_SEMANTIC_SEARCH_MIN_SCORE must be between 0 and 1",
     )
+# Characters of a document's text translated at most, the rest is left out
+LLM_TRANSLATION_MAX_LENGTH = get_int_from_env(
+    "PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH",
+    50000,
+)
+if LLM_TRANSLATION_MAX_LENGTH < 1:
+    raise ImproperlyConfigured(
+        "PAPERLESS_AI_LLM_TRANSLATION_MAX_LENGTH must be >= 1",
+    )
 # JSON object passed straight through to the LLM backend's request body
 LLM_EXTRA_PARAMS = get_json_from_env("PAPERLESS_AI_LLM_EXTRA_PARAMS", {}, dict)

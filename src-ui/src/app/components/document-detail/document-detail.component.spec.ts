@@ -335,6 +335,20 @@ describe('DocumentDetailComponent', () => {
     )
   })
 
+  it('should open the translation tab via url params', () => {
+    jest
+      .spyOn(activatedRoute, 'paramMap', 'get')
+      .mockReturnValue(of(convertToParamMap({ id: 3, section: 'translation' })))
+    jest.spyOn(openDocumentsService, 'getOpenDocument').mockReturnValue(null)
+    jest
+      .spyOn(openDocumentsService, 'openDocument')
+      .mockReturnValueOnce(of(true))
+    fixture.detectChanges()
+    expect(component.activeNavID()).toEqual(
+      component.DocumentDetailNavIDs.Translation
+    )
+  })
+
   it('should switch from preview to details when pdf preview enters the DOM', () => {
     jest.useFakeTimers()
     component.nav = {

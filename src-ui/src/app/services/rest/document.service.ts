@@ -12,6 +12,7 @@ import {
 import { DocumentMetadata } from 'src/app/data/document-metadata'
 import { DocumentSuggestions } from 'src/app/data/document-suggestions'
 import { Params } from '@angular/router'
+import { DocumentTranslation } from 'src/app/data/document-translation'
 import { FilterRule } from 'src/app/data/filter-rule'
 import {
   SEMANTIC_SEARCH_PARAMETER,
@@ -449,6 +450,23 @@ export class DocumentService extends AbstractPaperlessService<Document> {
     return this.http.get<DocumentSuggestions>(
       this.getResourceUrl(id, 'ai_suggestions')
     )
+  }
+
+  getTranslation(id: number): Observable<DocumentTranslation> {
+    return this.http.get<DocumentTranslation>(
+      this.getResourceUrl(id, 'translation')
+    )
+  }
+
+  requestTranslation(id: number): Observable<DocumentTranslation> {
+    return this.http.post<DocumentTranslation>(
+      this.getResourceUrl(id, 'translation'),
+      {}
+    )
+  }
+
+  deleteTranslation(id: number): Observable<void> {
+    return this.http.delete<void>(this.getResourceUrl(id, 'translation'))
   }
 
   getHistory(id: number): Observable<AuditLogEntry[]> {

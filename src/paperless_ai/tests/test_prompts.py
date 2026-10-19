@@ -6,6 +6,7 @@ from paperless_ai.prompts.context import ClassificationPromptContext
 from paperless_ai.prompts.context import LocalizationPromptContext
 from paperless_ai.prompts.context import RagContextPromptContext
 from paperless_ai.prompts.context import TaxonomyBlockPromptContext
+from paperless_ai.prompts.context import TranslationPromptContext
 from paperless_ai.prompts.render import PromptName
 from paperless_ai.prompts.render import render_prompt
 
@@ -49,6 +50,10 @@ _MINIMAL_CONTEXTS = {
     ),
     PromptName.CHAT_QA: ChatQaPromptContext(output_language=None),
     PromptName.CHAT_REFINE: ChatRefinePromptContext(output_language=None),
+    PromptName.TRANSLATION: TranslationPromptContext(
+        language_name="English",
+        text="Sehr geehrte Damen und Herren",
+    ),
 }
 
 

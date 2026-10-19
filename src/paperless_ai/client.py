@@ -174,6 +174,18 @@ class AIClient:
             allowed_candidate_ids,
         )
 
+    def run_text_query(self, prompt: str) -> str:
+        """Send ``prompt`` and return the model's plain-text answer."""
+        from llama_index.core.llms import ChatMessage
+
+        messages = [ChatMessage(role="user", content=prompt)]
+        with self._normalize_errors():
+            if self.settings.llm_backend == LLMBackend.OLLAMA:
+                result = self.llm.chat(messages, think=False)
+            else:
+                result = self.llm.chat(messages)
+        return (result.message.content or "").strip()
+
     @contextmanager
     def _normalize_errors(self) -> Iterator[None]:
         try:

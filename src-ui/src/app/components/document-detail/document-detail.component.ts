@@ -138,6 +138,7 @@ import { DocumentNotesComponent } from '../document-notes/document-notes.compone
 import { ComponentWithPermissions } from '../with-permissions/with-permissions.component'
 import { DocumentBarcodesComponent } from './document-barcodes/document-barcodes.component'
 import { DocumentHistoryComponent } from './document-history/document-history.component'
+import { DocumentTranslationComponent } from './document-translation/document-translation.component'
 import { DocumentVersionDropdownComponent } from './document-version-dropdown/document-version-dropdown.component'
 import { MetadataCollapseComponent } from './metadata-collapse/metadata-collapse.component'
 
@@ -150,6 +151,7 @@ enum DocumentDetailNavIDs {
   Permissions = 6,
   History = 7,
   Duplicates = 8,
+  Translation = 9,
 }
 
 enum ContentRenderType {
@@ -175,6 +177,7 @@ interface IncomingDocumentUpdate {
     CustomFieldsDropdownComponent,
     DocumentNotesComponent,
     DocumentHistoryComponent,
+    DocumentTranslationComponent,
     CheckComponent,
     DateComponent,
     DocumentLinkComponent,

@@ -155,6 +155,7 @@ from documents.models import Correspondent
 from documents.models import CustomField
 from documents.models import CustomFieldInstance
 from documents.models import Document
+from documents.models import DocumentTranslation
 from documents.models import DocumentType
 from documents.models import Note
 from documents.models import PaperlessTask
@@ -197,6 +198,7 @@ from documents.serialisers import DeleteDocumentsSerializer
 from documents.serialisers import DocumentBarcodeSerializer
 from documents.serialisers import DocumentSelectionSerializer
 from documents.serialisers import DocumentSerializer
+from documents.serialisers import DocumentTranslationSerializer
 from documents.serialisers import DocumentTypeSerializer
 from documents.serialisers import DocumentVersionLabelSerializer
 from documents.serialisers import DocumentVersionSerializer
@@ -982,6 +984,36 @@ class EmailDocumentDetailSchema(EmailSerializer):
                     "dates": serializers.ListField(child=serializers.CharField()),
                 },
             ),
+            400: None,
+            403: None,
+            404: None,
+        },
+    ),
+    translation=extend_schema(
+        description=(
+            "The document's AI translation. POST queues a new translation, "
+            "DELETE removes it."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="language",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Language code to translate into, default the AI output "
+                    "language or the user's UI language"
+                ),
+            ),
+        ],
+        request=inline_serializer(
+            name="DocumentTranslationRequest",
+            fields={"language": serializers.CharField(required=False)},
+        ),
+        responses={
+            200: DocumentTranslationSerializer,
+            202: DocumentTranslationSerializer,
+            204: None,
             400: None,
             403: None,
             404: None,
@@ -1944,6 +1976,66 @@ class DocumentViewSet(
             return FileResponse(handle, content_type="image/webp")
         except FileNotFoundError:
             raise Http404
+
+    @action(
+        methods=["get", "post", "delete"],
+        detail=True,
+        pagination_class=None,
+        filter_backends=[],
+    )
+    def translation(self, request, pk=None):
+        """The document's AI translation into ``language`` (default: the AI
+        output language, else the user's UI language). POST queues a new
+        translation, DELETE removes it."""
+        from paperless_ai.translation import language_display_name
+        from paperless_ai.translation import request_translation
+        from paperless_ai.translation import translation_language
+
+        doc = get_object_or_404(
+            Document.objects.select_related("owner", "root_document__owner"),
+            pk=pk,
+        )
+        # Versions share the translation of their root, like their notes
+        root = doc.root_document or doc
+        permission = "view_document" if request.method == "GET" else "change_document"
+        if not has_perms_owner_aware(request.user, permission, root):
+            return HttpResponseForbidden("Insufficient permissions")
+        if not AIConfig().ai_enabled:
+            return HttpResponseBadRequest("AI is required for this feature")
+
+        requested = request.query_params.get("language")
+        if request.method == "POST":
+            requested = request.data.get("language") or requested
+        try:
+            language = translation_language(request.user, requested)
+        except ValueError as exc:
+            raise ValidationError({"language": [str(exc)]}) from exc
+
+        if request.method == "POST":
+            translation = request_translation(root, language)
+            return Response(
+                DocumentTranslationSerializer(translation).data,
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        translation = DocumentTranslation.objects.filter(
+            document=root,
+            language=language,
+        ).first()
+        if request.method == "DELETE":
+            if translation is not None:
+                translation.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        if translation is None:
+            # Not translated yet; name the language a POST would use
+            return Response(
+                {
+                    "language": language,
+                    "language_name": language_display_name(language),
+                    "status": None,
+                },
+            )
+        return Response(DocumentTranslationSerializer(translation).data)
 
     @action(methods=["get"], detail=True)
     def download(self, request, pk=None):

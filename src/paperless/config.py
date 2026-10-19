@@ -264,6 +264,7 @@ class AIConfig(BaseConfig):
     llm_allow_internal_endpoints: bool = dataclasses.field(init=False)
     llm_semantic_search_min_score: float = dataclasses.field(init=False)
     llm_index_embed_metadata: bool = dataclasses.field(init=False)
+    llm_translation_max_length: int = dataclasses.field(init=False)
     llm_extra_params: dict[str, Any] = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
@@ -303,6 +304,7 @@ class AIConfig(BaseConfig):
         self.llm_allow_internal_endpoints = settings.LLM_ALLOW_INTERNAL_ENDPOINTS
         self.llm_semantic_search_min_score = settings.LLM_SEMANTIC_SEARCH_MIN_SCORE
         self.llm_index_embed_metadata = settings.LLM_INDEX_EMBED_METADATA
+        self.llm_translation_max_length = settings.LLM_TRANSLATION_MAX_LENGTH
         self.llm_extra_params = settings.LLM_EXTRA_PARAMS
 
     @property

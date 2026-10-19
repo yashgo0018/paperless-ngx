@@ -1,0 +1,58 @@
+@if (loading()) {
+  <div class="d-flex">
+    <output class="spinner-border spinner-border-sm fw-normal"></output>
+  </div>
+} @else {
+  @switch (translation()?.status) {
+    @case (DocumentTranslationStatus.Pending) {
+      <div class="d-flex align-items-center gap-2">
+        <output class="spinner-border spinner-border-sm fw-normal"></output>
+        <span i18n>Translating into {{ translation().language_name }}. This can take a few minutes.</span>
+      </div>
+    }
+    @case (DocumentTranslationStatus.Failed) {
+      <div class="alert alert-danger" role="alert">
+        <ng-container i18n>The translation failed:</ng-container> {{ translation().error }}
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-primary" (click)="translate()" [disabled]="!canEdit() || working()" i18n>Try again</button>
+    }
+    @case (DocumentTranslationStatus.Done) {
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <span class="text-muted small">
+          @if (alreadyInLanguage) {
+            <ng-container i18n>This document is already in {{ translation().language_name }}.</ng-container>
+          } @else if (translation().source_language_name) {
+            <ng-container i18n>Translated from {{ translation().source_language_name }} into {{ translation().language_name }}</ng-container>
+          } @else {
+            <ng-container i18n>Translated into {{ translation().language_name }}</ng-container>
+          }
+          @if (translation().model) {
+            <ng-container i18n>by {{ translation().model }}</ng-container>
+          }
+          &middot; {{ translation().modified | customDate }}
+        </span>
+        @if (translation().outdated) {
+          <span class="badge text-bg-warning" i18n-title title="The document's text changed since it was translated" i18n>Outdated</span>
+        }
+        <div class="ms-auto d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" (click)="translate()" [disabled]="!canEdit() || working()">
+            <i-bs name="arrow-clockwise"></i-bs><ng-container i18n>Translate again</ng-container>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger" (click)="delete()" [disabled]="!canEdit() || working()">
+            <i-bs name="trash"></i-bs><ng-container i18n>Delete</ng-container>
+          </button>
+        </div>
+      </div>
+      @if (translation().truncated) {
+        <p class="small text-muted fst-italic" i18n>This document is long, so only its beginning was translated.</p>
+      }
+      <div class="translation-content">{{ translation().content }}</div>
+    }
+    @default {
+      <p class="text-muted" i18n>This document has not been translated into {{ translation()?.language_name }} yet. Its text is translated by the configured AI.</p>
+      <button type="button" class="btn btn-sm btn-primary" (click)="translate()" [disabled]="!canEdit() || working()">
+        <i-bs name="translate"></i-bs><ng-container i18n>Translate into {{ translation()?.language_name }}</ng-container>
+      </button>
+    }
+  }
+}
