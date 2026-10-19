@@ -45,6 +45,14 @@
           </div>
         }
       }
+      @if (aiSuggestionsAvailable) {
+        <div class="mt-3">
+          <pngx-input-check i18n-title title="Suggest values with AI" formControlName="ai_suggest" i18n-hint hint="AI suggestions include a value for this field when the document states one."></pngx-input-check>
+          @if (objectForm.get('extra_data.ai_suggest').value) {
+            <pngx-input-text i18n-title title="AI hint" formControlName="ai_hint" i18n-hint hint="Optional: what to look for, e.g. the total amount including VAT." autocomplete="off"></pngx-input-text>
+          }
+        </div>
+      }
     </div>
   </div>
   <div class="modal-footer">

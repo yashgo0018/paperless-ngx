@@ -8,6 +8,7 @@ import { NgbActiveModal, NgbModule } from '@ng-bootstrap/ng-bootstrap'
 import { NgSelectModule } from '@ng-select/ng-select'
 import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
 import { CustomFieldDataType } from 'src/app/data/custom-field'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { IfOwnerDirective } from 'src/app/directives/if-owner.directive'
 import { IfPermissionsDirective } from 'src/app/directives/if-permissions.directive'
 import { SettingsService } from 'src/app/services/settings.service'
@@ -60,6 +61,32 @@ describe('CustomFieldEditDialogComponent', () => {
     component.dialogMode.set(EditDialogMode.EDIT)
     fixture.detectChanges()
     expect(editTitleSpy).toHaveBeenCalled()
+  })
+
+  it('should not offer AI suggestions with AI disabled', () => {
+    component.objectForm.get('data_type').setValue(CustomFieldDataType.Monetary)
+    expect(component.aiSuggestionsAvailable).toBe(false)
+  })
+
+  it('should offer AI suggestions with AI enabled, except for document links', () => {
+    settingsService.set(SETTINGS_KEYS.AI_ENABLED, true)
+    fixture = TestBed.createComponent(CustomFieldEditDialogComponent)
+    component = fixture.componentInstance
+    component.dialogMode.set(EditDialogMode.CREATE)
+    component.objectForm.get('data_type').setValue(CustomFieldDataType.Monetary)
+    component.objectForm.get('extra_data.ai_suggest').setValue(true)
+    fixture.detectChanges()
+
+    expect(component.aiSuggestionsAvailable).toBe(true)
+    expect(fixture.nativeElement.textContent).toContain(
+      'Suggest values with AI'
+    )
+    expect(fixture.nativeElement.textContent).toContain('AI hint')
+
+    component.objectForm
+      .get('data_type')
+      .setValue(CustomFieldDataType.DocumentLink)
+    expect(component.aiSuggestionsAvailable).toBe(false)
   })
 
   it('should disable data type select on edit', () => {

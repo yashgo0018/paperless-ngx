@@ -13,6 +13,8 @@ MAX_EXISTING_IDS: Final = 10
 MAX_NEW_NAMES: Final = 8
 MAX_SINGLE_VALUE_NAMES: Final = 4
 MAX_DATES: Final = 3
+# Matches custom_fields.MAX_AI_CUSTOM_FIELDS, the most fields in the prompt
+MAX_CUSTOM_FIELD_VALUES: Final = 10
 # Matches documents.models.Document.title's CharField(max_length=128).
 MAX_TITLE_LENGTH: Final = 128
 
@@ -166,6 +168,23 @@ class DocumentClassifierSchema(BaseModel):
             "document was issued."
         ),
     )
+    custom_field_ids: list[int] = Field(
+        default_factory=list,
+        max_length=MAX_CUSTOM_FIELD_VALUES,
+        description=(
+            "IDs of the custom fields listed in the prompt that the document "
+            "clearly states a value for. Leave a field out rather than guess. "
+            "Empty when no custom fields are listed."
+        ),
+    )
+    custom_field_values: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_CUSTOM_FIELD_VALUES,
+        description=(
+            "The value of each custom field in custom_field_ids, in the same "
+            "order, in the format the field asks for."
+        ),
+    )
 
     @field_validator(
         "title",
@@ -182,6 +201,8 @@ class DocumentClassifierSchema(BaseModel):
         "matched_storage_paths",
         "storage_path_ids",
         "dates",
+        "custom_field_ids",
+        "custom_field_values",
         mode="before",
     )
     @classmethod
@@ -196,6 +217,14 @@ class TaxonomyChoiceDict(TypedDict):
     new_names: list[str]
 
 
+class CustomFieldSuggestion(TypedDict):
+    """A custom field's suggested value, as the model returned it. Converted
+    to the field's data type only when used, against its current definition."""
+
+    field: int
+    value: str
+
+
 class ClassificationSuggestions(TypedDict):
     """Internal shape used after the flat LLM response is validated."""
 
@@ -205,6 +234,7 @@ class ClassificationSuggestions(TypedDict):
     document_types: TaxonomyChoiceDict
     storage_paths: TaxonomyChoiceDict
     dates: list[str]
+    custom_fields: list[CustomFieldSuggestion]
 
 
 def model_to_classification_suggestions(
@@ -215,7 +245,8 @@ def model_to_classification_suggestions(
 
     A mapping is accepted only when its name is copied from the model's own
     complete suggestion list and its ID was actually shown for that category.
-    Invalid or unpaired mappings leave the original name untouched.
+    Invalid or unpaired mappings leave the original name untouched. Custom
+    field values are kept only for fields shown in the prompt, once each.
     """
     allowed_candidate_ids = allowed_candidate_ids or {}
 
@@ -270,7 +301,29 @@ def model_to_classification_suggestions(
             "storage_paths",
         ),
         dates=model.dates,
+        custom_fields=_custom_field_suggestions(
+            model.custom_field_ids,
+            model.custom_field_values,
+            allowed_candidate_ids.get("custom_fields", set()),
+        ),
     )
+
+
+def _custom_field_suggestions(
+    field_ids: list[int],
+    values: list[str],
+    allowed_field_ids: set[int],
+) -> list[CustomFieldSuggestion]:
+    suggestions: list[CustomFieldSuggestion] = []
+    seen: set[int] = set()
+    for field_id, value in zip(field_ids, values, strict=False):
+        if field_id not in allowed_field_ids or field_id in seen:
+            continue
+        if not value.strip():
+            continue
+        seen.add(field_id)
+        suggestions.append(CustomFieldSuggestion(field=field_id, value=value.strip()))
+    return suggestions
 
 
 def classification_suggestions_to_model(
@@ -292,4 +345,7 @@ def classification_suggestions_to_model(
         matched_storage_paths=[],
         storage_path_ids=[],
         dates=suggestions["dates"],
+        # Values are never localized
+        custom_field_ids=[],
+        custom_field_values=[],
     )

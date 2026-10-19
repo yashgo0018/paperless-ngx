@@ -21,6 +21,7 @@ from documents.caching import get_llm_suggestion_cache
 from documents.caching import get_suggestion_cache_key
 from documents.caching import set_llm_suggestions_cache
 from documents.models import Correspondent
+from documents.models import CustomField
 from documents.models import Document
 from documents.models import DocumentType
 from documents.models import ShareLink
@@ -489,12 +490,83 @@ class TestAISuggestions(DirectoriesMixin, TestCase):
                 "storage_paths": [self.path1.pk],
                 "suggested_storage_paths": [],
                 "dates": ["2023-01-01"],
+                "custom_fields": [],
             },
         )
         mock_get_ai_classification.assert_called_once_with(
             self.document,
             self.user,
             None,
+        )
+
+    @patch("documents.views.get_ai_document_classification")
+    @override_settings(
+        AI_ENABLED=True,
+        LLM_BACKEND="mock_backend",
+    )
+    def test_ai_suggestions_include_custom_field_values(
+        self,
+        mock_get_ai_classification,
+    ) -> None:
+        """
+        GIVEN:
+            - Custom fields enabled for AI suggestions, and one that is not
+            - Model suggestions for all of them, one of them invalid
+        WHEN:
+            - ai_suggestions is requested
+        THEN:
+            - Valid values of enabled fields are returned, converted to the
+              field's data type; the rest are left out
+        """
+        total = CustomField.objects.create(
+            name="Total",
+            data_type=CustomField.FieldDataType.MONETARY,
+            extra_data={"ai_suggest": True},
+        )
+        status_field = CustomField.objects.create(
+            name="Status",
+            data_type=CustomField.FieldDataType.SELECT,
+            extra_data={
+                "ai_suggest": True,
+                "select_options": [{"id": "opt-open", "label": "Unpaid"}],
+            },
+        )
+        due = CustomField.objects.create(
+            name="Due",
+            data_type=CustomField.FieldDataType.DATE,
+            extra_data={"ai_suggest": True},
+        )
+        disabled = CustomField.objects.create(
+            name="Notes",
+            data_type=CustomField.FieldDataType.STRING,
+        )
+        mock_get_ai_classification.return_value = {
+            "title": "AI Title",
+            "tags": {"existing_ids": [], "new_names": []},
+            "correspondents": {"existing_ids": [], "new_names": []},
+            "document_types": {"existing_ids": [], "new_names": []},
+            "storage_paths": {"existing_ids": [], "new_names": []},
+            "dates": [],
+            "custom_fields": [
+                {"field": total.pk, "value": "€ 12,50"},
+                {"field": status_field.pk, "value": "unpaid"},
+                {"field": due.pk, "value": "next week"},
+                {"field": disabled.pk, "value": "anything"},
+            ],
+        }
+
+        self.client.force_login(user=self.user)
+        response = self.client.get(
+            f"/api/documents/{self.document.pk}/ai_suggestions/",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.json()["custom_fields"],
+            [
+                {"field": total.pk, "value": "EUR12.50"},
+                {"field": status_field.pk, "value": "opt-open"},
+            ],
         )
 
     @patch("documents.views.get_ai_document_classification")

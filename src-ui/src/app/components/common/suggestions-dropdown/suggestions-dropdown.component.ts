@@ -7,7 +7,11 @@ import {
 } from '@angular/core'
 import { NgbDropdown, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap'
 import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
-import { DocumentSuggestions } from 'src/app/data/document-suggestions'
+import { CustomField, CustomFieldDataType } from 'src/app/data/custom-field'
+import {
+  CustomFieldSuggestion,
+  DocumentSuggestions,
+} from 'src/app/data/document-suggestions'
 import { SuggestionSource } from 'src/app/data/ui-settings'
 import { pngxPopperOptions } from 'src/app/utils/popper-options'
 
@@ -36,6 +40,8 @@ export class SuggestionsDropdownComponent {
   readonly appliedStoragePath = input<number>(null)
   readonly appliedTitle = input<string>(null)
   readonly appliedCreated = input<string>(null)
+  readonly customFields = input<CustomField[]>([])
+  readonly appliedCustomFields = input<{ field: number; value: any }[]>([])
 
   @Output()
   getSuggestions: EventEmitter<SuggestionSource> = new EventEmitter()
@@ -51,6 +57,9 @@ export class SuggestionsDropdownComponent {
 
   @Output()
   addCorrespondent: EventEmitter<string> = new EventEmitter()
+
+  @Output()
+  applyCustomField: EventEmitter<CustomFieldSuggestion> = new EventEmitter()
 
   public clickSuggest(): void {
     if (this.disabled() || this.loading()) {
@@ -98,8 +107,42 @@ export class SuggestionsDropdownComponent {
     return (
       (this.suggestions()?.suggested_correspondents?.length ?? 0) +
       (this.suggestions()?.suggested_tags?.length ?? 0) +
-      (this.suggestions()?.suggested_document_types?.length ?? 0)
+      (this.suggestions()?.suggested_document_types?.length ?? 0) +
+      this.customFieldSuggestions.length
     )
+  }
+
+  // suggested values of known custom fields, unless the document has them
+  get customFieldSuggestions(): CustomFieldSuggestion[] {
+    return (this.suggestions()?.custom_fields ?? []).filter(
+      (suggestion) =>
+        this.getCustomField(suggestion) &&
+        !(this.appliedCustomFields() ?? []).some(
+          (applied) =>
+            applied.field === suggestion.field &&
+            applied.value === suggestion.value
+        )
+    )
+  }
+
+  public getCustomField(suggestion: CustomFieldSuggestion): CustomField {
+    return this.customFields()?.find((field) => field.id === suggestion.field)
+  }
+
+  public customFieldDisplayValue(suggestion: CustomFieldSuggestion): string {
+    const field = this.getCustomField(suggestion)
+    switch (field?.data_type) {
+      case CustomFieldDataType.Select:
+        return (
+          field.extra_data?.select_options?.find(
+            (option) => option.id === suggestion.value
+          )?.label ?? suggestion.value
+        )
+      case CustomFieldDataType.Boolean:
+        return suggestion.value ? $localize`Yes` : $localize`No`
+      default:
+        return String(suggestion.value)
+    }
   }
 
   get reusableSuggestions(): number {
@@ -169,7 +212,8 @@ export class SuggestionsDropdownComponent {
       !suggestions.suggested_document_types?.length &&
       !suggestions.storage_paths?.length &&
       !suggestions.suggested_storage_paths?.length &&
-      !suggestions.dates?.length
+      !suggestions.dates?.length &&
+      !suggestions.custom_fields?.length
     )
   }
 }

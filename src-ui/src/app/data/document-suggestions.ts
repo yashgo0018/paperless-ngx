@@ -1,3 +1,8 @@
+export interface CustomFieldSuggestion {
+  field: number
+  value: any // already converted to the field's data type
+}
+
 export interface DocumentSuggestions {
   title?: string
 
@@ -14,6 +19,8 @@ export interface DocumentSuggestions {
   suggested_storage_paths?: string[]
 
   dates?: string[] // ISO-formatted date string e.g. 2022-11-03
+
+  custom_fields?: CustomFieldSuggestion[]
 }
 
 const union = <T>(a: T[] = [], b: T[] = []): T[] => [...new Set([...a, ...b])]
@@ -43,5 +50,11 @@ export function mergeSuggestions(
       b.suggested_storage_paths
     ),
     dates: union(a.dates, b.dates),
+    custom_fields: [
+      ...(a.custom_fields ?? []),
+      ...(b.custom_fields ?? []).filter(
+        (s) => !a.custom_fields?.some((existing) => existing.field === s.field)
+      ),
+    ],
   }
 }

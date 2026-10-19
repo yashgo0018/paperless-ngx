@@ -47,7 +47,8 @@ CLASSIFIER_MODIFIED_KEY: Final[str] = "classifier_modified"
 #          [...]} per taxonomy field (#13676)
 #   1002 - names are always generated and optional candidate mappings are
 #          validated separately, so candidate-anchored 1001 results are stale
-LLM_CACHE_CLASSIFIER_VERSION: Final[int] = 1002
+#   1003 - suggestions include custom field values
+LLM_CACHE_CLASSIFIER_VERSION: Final[int] = 1003
 
 CACHE_1_MINUTE: Final[int] = 60
 CACHE_5_MINUTES: Final[int] = 5 * CACHE_1_MINUTE

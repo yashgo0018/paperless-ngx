@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing'
 import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap'
 import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { CustomFieldDataType } from 'src/app/data/custom-field'
 import { SuggestionSource } from 'src/app/data/ui-settings'
 import { SuggestionsDropdownComponent } from './suggestions-dropdown.component'
 
@@ -215,6 +216,66 @@ describe('SuggestionsDropdownComponent', () => {
     })
 
     expect(component.noSuggestions).toBeFalsy()
+  })
+
+  describe('custom field suggestions', () => {
+    const customFields = [
+      { id: 1, name: 'Total', data_type: CustomFieldDataType.Monetary },
+      {
+        id: 2,
+        name: 'Status',
+        data_type: CustomFieldDataType.Select,
+        extra_data: { select_options: [{ id: 'opt-open', label: 'Unpaid' }] },
+      },
+      { id: 3, name: 'Paid', data_type: CustomFieldDataType.Boolean },
+    ]
+
+    beforeEach(() => {
+      fixture.componentRef.setInput('customFields', customFields)
+      fixture.componentRef.setInput('suggestions', {
+        custom_fields: [
+          { field: 1, value: 'EUR12.50' },
+          { field: 2, value: 'opt-open' },
+          { field: 3, value: false },
+          { field: 99, value: 'unknown field' },
+        ],
+      })
+    })
+
+    it('should list values of known fields the document does not have', () => {
+      fixture.componentRef.setInput('appliedCustomFields', [
+        { field: 1, value: 'EUR12.50' },
+        { field: 2, value: null },
+      ])
+
+      expect(component.customFieldSuggestions.map((s) => s.field)).toEqual([
+        2, 3,
+      ])
+      expect(component.novelSuggestions).toBe(2)
+      expect(component.noSuggestions).toBe(false)
+    })
+
+    it('should show select labels and booleans readably', () => {
+      const [total, status, paid] = component.customFieldSuggestions
+      expect(component.customFieldDisplayValue(total)).toBe('EUR12.50')
+      expect(component.customFieldDisplayValue(status)).toBe('Unpaid')
+      expect(component.customFieldDisplayValue(paid)).toBe('No')
+    })
+
+    it('should emit a value to apply when clicked', () => {
+      const emitSpy = jest.spyOn(component.applyCustomField, 'emit')
+      component.dropdown.open()
+      fixture.detectChanges()
+
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('button.list-group-item')
+      ).find((b: HTMLElement) =>
+        b.textContent.includes('Unpaid')
+      ) as HTMLElement
+      button.click()
+
+      expect(emitSpy).toHaveBeenCalledWith({ field: 2, value: 'opt-open' })
+    })
   })
 
   it('should emit getSuggestions when clickSuggest is called and suggestions are null', () => {

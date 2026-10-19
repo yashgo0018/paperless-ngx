@@ -22,9 +22,11 @@ import {
   CustomFieldDataType,
   DATA_TYPE_LABELS,
 } from 'src/app/data/custom-field'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { CustomFieldsService } from 'src/app/services/rest/custom-fields.service'
 import { UserService } from 'src/app/services/rest/user.service'
 import { SettingsService } from 'src/app/services/settings.service'
+import { CheckComponent } from '../../input/check/check.component'
 import { SelectComponent } from '../../input/select/select.component'
 import { TextComponent } from '../../input/text/text.component'
 import { EditDialogComponent, EditDialogMode } from '../edit-dialog.component'
@@ -36,6 +38,7 @@ const SELECT_OPTION_PAGE_SIZE = 8
   templateUrl: './custom-field-edit-dialog.component.html',
   styleUrls: ['./custom-field-edit-dialog.component.scss'],
   imports: [
+    CheckComponent,
     SelectComponent,
     TextComponent,
     FormsModule,
@@ -129,6 +132,8 @@ export class CustomFieldEditDialogComponent
       extra_data: new FormGroup({
         select_options: new FormArray([]),
         default_currency: new FormControl(null),
+        ai_suggest: new FormControl(false),
+        ai_hint: new FormControl(null),
       }),
     })
   }
@@ -146,6 +151,16 @@ export class CustomFieldEditDialogComponent
 
   getDataTypes() {
     return DATA_TYPE_LABELS
+  }
+
+  // document links point at other documents, which the AI cannot know
+  get aiSuggestionsAvailable(): boolean {
+    const dataType = this.objectForm.get('data_type')?.value
+    return (
+      this.settingsService.get(SETTINGS_KEYS.AI_ENABLED) &&
+      !!dataType &&
+      dataType !== CustomFieldDataType.DocumentLink
+    )
   }
 
   get typeFieldDisabled(): boolean {

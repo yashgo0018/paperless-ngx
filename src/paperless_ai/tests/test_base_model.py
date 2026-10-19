@@ -5,6 +5,7 @@ from paperless_ai.base_model import MAX_NEW_NAMES
 from paperless_ai.base_model import MAX_SINGLE_VALUE_NAMES
 from paperless_ai.base_model import MAX_TITLE_LENGTH
 from paperless_ai.base_model import ClassificationSuggestions
+from paperless_ai.base_model import CustomFieldSuggestion
 from paperless_ai.base_model import DocumentClassifierSchema
 from paperless_ai.base_model import TaxonomyChoiceDict
 from paperless_ai.base_model import classification_suggestions_to_model
@@ -43,6 +44,8 @@ def test_document_classifier_schema_declared_defaults():
         "matched_storage_paths": [],
         "storage_path_ids": [],
         "dates": [],
+        "custom_field_ids": [],
+        "custom_field_values": [],
     }
 
 
@@ -365,6 +368,7 @@ def test_internal_suggestions_convert_to_names_only_model():
             new_names=["Finance/Utilities"],
         ),
         dates=["2026-08-30"],
+        custom_fields=[CustomFieldSuggestion(field=5, value="EUR12.00")],
     )
 
     model = classification_suggestions_to_model(suggestions)
@@ -387,4 +391,6 @@ def test_internal_suggestions_convert_to_names_only_model():
             new_names=["Finance/Utilities"],
         ),
         dates=["2026-08-30"],
+        # Values are never sent for localization
+        custom_fields=[],
     )
