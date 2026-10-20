@@ -17,10 +17,14 @@ jobs:
   build:
     runs-on: ci-vm-host
     timeout-minutes: 120
-    env:
-      REGISTRY: git.tail751a68.ts.net
-      IMAGE: git.tail751a68.ts.net/yash/paperless-ngx
     steps:
+      - name: Registry name
+        # follows the Forgejo ROOT_URL, so a domain change needs no edit here
+        run: |
+          host="${{ github.server_url }}"; host="${host#https://}"; host="${host%/}"
+          echo "REGISTRY=${host}" >> "$GITHUB_ENV"
+          echo "IMAGE=${host}/${{ github.repository }}" >> "$GITHUB_ENV"
+
       - name: Check out
         run: |
           rm -rf src
